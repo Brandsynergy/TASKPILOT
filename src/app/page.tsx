@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Sparkles, Loader2, CheckCircle2, AlertCircle, Wand2 } from "lucide-react";
 
 type RunLogEntry = {
@@ -49,30 +48,6 @@ export default function Home() {
 
   return (
     <main className="flex-1 w-full">
-      <header className="w-full border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Image
-              src="/icon-192.png"
-              alt="TaskPilot"
-              width={32}
-              height={32}
-              className="rounded-lg"
-              priority
-            />
-            <span className="font-semibold tracking-tight">TaskPilot</span>
-          </div>
-          <a
-            href="https://github.com/BRANDSYNERGY/taskpilot"
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition"
-          >
-            GitHub
-          </a>
-        </div>
-      </header>
-
       <section className="max-w-3xl mx-auto px-4 pt-10 pb-6 sm:pt-16">
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">

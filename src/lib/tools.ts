@@ -1,4 +1,5 @@
 import "server-only";
+import { db } from "@/lib/db";
 
 export type ToolDefinition = {
   name: string;
@@ -337,6 +338,53 @@ export const TOOLS: ToolDefinition[] = [
           }
         );
         return { ok: res.status === 200, status: res.status, body: res.body };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
+  {
+    name: "get_contacts",
+    description:
+      "Fetch contacts from the TaskPilot contacts database. Returns a list of contacts with name, email, phone, and any extra fields. Use this before loop automations — e.g. 'for each contact, send an email'. Optionally filter by list name.",
+    parameters: {
+      type: "object",
+      properties: {
+        list_name: {
+          type: "string",
+          description:
+            "Optional list name to filter contacts by. If omitted, returns all contacts.",
+        },
+        limit: {
+          type: "number",
+          description: "Max number of contacts to return. Defaults to 50.",
+        },
+      },
+      additionalProperties: false,
+    },
+    async execute(args: { list_name?: string; limit?: number }) {
+      try {
+        const contacts = await db.contact.findMany({
+          where: args.list_name ? { listName: args.list_name } : undefined,
+          take: args.limit ?? 50,
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            listName: true,
+            extraJson: true,
+          },
+        });
+        return {
+          count: contacts.length,
+          contacts: contacts.map((c) => ({
+            ...c,
+            extra: c.extraJson ? JSON.parse(c.extraJson) : undefined,
+            extraJson: undefined,
+          })),
+        };
       } catch (err) {
         return { error: (err as Error).message };
       }
