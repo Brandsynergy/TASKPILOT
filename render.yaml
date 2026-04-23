@@ -29,6 +29,12 @@ services:
           property: connectionString
       - key: CRON_SECRET
         generateValue: true
+      - key: FAL_API_KEY
+        sync: false
+      - key: PUBLER_API_KEY
+        sync: false
+      - key: PUBLER_ACCOUNT_IDS
+        sync: false
 
 databases:
   - name: taskpilot-db

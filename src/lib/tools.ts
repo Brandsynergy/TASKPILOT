@@ -390,6 +390,142 @@ export const TOOLS: ToolDefinition[] = [
       }
     },
   },
+  {
+    name: "generate_image",
+    description:
+      "ACTION: Generate an image from a text prompt using Flux AI (via fal.ai). Returns a public image URL you can use in other tools. Requires FAL_API_KEY env var. Use this to create illustrations, social media visuals, motivational quote backgrounds, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "Detailed description of the image to generate. Be specific about style, mood, colours, subject.",
+        },
+        size: {
+          type: "string",
+          enum: ["square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"],
+          description: "Image dimensions. Use square_hd for social posts (default). portrait_16_9 for TikTok/Reels.",
+        },
+      },
+      required: ["prompt"],
+      additionalProperties: false,
+    },
+    async execute(args: { prompt: string; size?: string }) {
+      const apiKey = process.env.FAL_API_KEY;
+      if (!apiKey) {
+        return {
+          error:
+            "Image generation is not configured. Sign up at https://fal.ai, get a free API key, then add FAL_API_KEY to your Render environment variables.",
+        };
+      }
+      try {
+        const res = await safeFetch(
+          "https://fal.run/fal-ai/flux/schnell",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Key ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: args.prompt,
+              image_size: args.size ?? "square_hd",
+              num_images: 1,
+              num_inference_steps: 4,
+            }),
+          },
+          30_000
+        );
+        if (res.status !== 200) {
+          return { error: `fal.ai returned ${res.status}: ${res.body}` };
+        }
+        const data = JSON.parse(res.body);
+        const imageUrl = data?.images?.[0]?.url;
+        if (!imageUrl) return { error: "No image returned from fal.ai", raw: res.body };
+        return { ok: true, image_url: imageUrl };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
+  {
+    name: "post_publer",
+    description:
+      "ACTION: Schedule or immediately publish a social media post via Publer (publer.io). Supports TikTok, Instagram, Facebook, Twitter/X, LinkedIn and more — whichever accounts you have connected in your Publer account. Requires PUBLER_API_KEY env var and at least one account_id. Can include text, image URLs, and an optional scheduled time.",
+    parameters: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description: "The post caption / text content.",
+        },
+        account_ids: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Array of Publer account IDs to post to. If not provided, uses PUBLER_ACCOUNT_IDS env var (comma-separated). Find account IDs at https://app.publer.io/api/v1/accounts after connecting your social accounts.",
+        },
+        media_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional array of public image or video URLs to attach to the post.",
+        },
+        scheduled_at: {
+          type: "string",
+          description:
+            "Optional ISO 8601 datetime to schedule the post (e.g. 2024-12-01T09:00:00Z). If omitted, posts immediately.",
+        },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+    async execute(args: {
+      text: string;
+      account_ids?: string[];
+      media_urls?: string[];
+      scheduled_at?: string;
+    }) {
+      const apiKey = process.env.PUBLER_API_KEY;
+      if (!apiKey) {
+        return {
+          error:
+            "Publer is not configured. Sign up at https://publer.io, go to Settings > API, copy your API key, then add PUBLER_API_KEY to your Render environment variables. Also add PUBLER_ACCOUNT_IDS (comma-separated account IDs from https://app.publer.io/api/v1/accounts).",
+        };
+      }
+      const accountIds =
+        args.account_ids ??
+        (process.env.PUBLER_ACCOUNT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      if (accountIds.length === 0) {
+        return {
+          error:
+            "No Publer account IDs provided. Either pass account_ids in the prompt, or set PUBLER_ACCOUNT_IDS env var. Get your account IDs from https://app.publer.io/api/v1/accounts.",
+        };
+      }
+      try {
+        const body: Record<string, unknown> = {
+          account_ids: accountIds,
+          text: args.text,
+        };
+        if (args.media_urls?.length) body.media_urls = args.media_urls;
+        if (args.scheduled_at) body.scheduled_at = args.scheduled_at;
+        const res = await safeFetch("https://app.publer.io/api/v1/posts", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        if (res.status >= 200 && res.status < 300) {
+          return { ok: true, status: res.status, response: res.body };
+        }
+        return { ok: false, status: res.status, error: res.body };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
 ];
 
 export function getToolByName(name: string): ToolDefinition | undefined {
