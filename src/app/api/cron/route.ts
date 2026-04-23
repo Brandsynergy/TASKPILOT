@@ -71,7 +71,8 @@ export async function POST(req: NextRequest) {
   return Response.json({ ok: true, ran: results.length, results });
 }
 
-export async function GET(req: NextRequest) {
-  // Allow GET for easy health checks from cron services
-  return POST(req);
+export async function GET() {
+  // Health check — cron-job.org and other services ping this to validate the URL.
+  // Returns 200 OK without running any automations.
+  return Response.json({ ok: true, message: "TaskPilot cron endpoint is ready." });
 }
