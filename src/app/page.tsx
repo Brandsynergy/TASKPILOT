@@ -17,10 +17,10 @@ type RunResponse = {
 };
 
 const EXAMPLES = [
-  "Fetch today's top 5 Hacker News stories and summarise them in one paragraph.",
-  "Grab the current Bitcoin price in USD and tell me if it's above $70,000.",
-  "Write a 3-line LinkedIn post announcing that we just launched TaskPilot.",
-  "Check https://example.com and tell me the page title.",
+  "Email a summary of today's top 3 Hacker News stories to me at your-email@example.com.",
+  "Post 'Good morning team!' to Slack using this webhook: https://hooks.slack.com/services/XXX/YYY/ZZZ",
+  "Fetch the latest BBC Premier League headlines and post a 3-bullet summary to Discord webhook https://discord.com/api/webhooks/XXX/YYY",
+  "Get the current Bitcoin price from https://api.coinpaprika.com/v1/tickers/btc-bitcoin and email it to me.",
 ];
 
 export default function Home() {

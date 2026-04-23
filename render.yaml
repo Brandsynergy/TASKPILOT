@@ -15,3 +15,11 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        value: onboarding@resend.dev
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false

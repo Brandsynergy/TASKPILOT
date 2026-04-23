@@ -141,6 +141,207 @@ export const TOOLS: ToolDefinition[] = [
       };
     },
   },
+  {
+    name: "send_email",
+    description:
+      "ACTION: Actually send a real email. Uses Resend under the hood. Requires RESEND_API_KEY to be set in the server environment. If it's not set, this tool returns an error explaining how to configure it. Use this whenever the user asks to email, mail, or send something to an email address.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: {
+          type: "string",
+          description: "Recipient email address, e.g. user@example.com.",
+        },
+        subject: { type: "string", description: "Email subject line." },
+        body: {
+          type: "string",
+          description:
+            "Email body. Plain text or simple HTML. If HTML, wrap in <p> tags etc.",
+        },
+        from: {
+          type: "string",
+          description:
+            "Optional sender address. Defaults to the RESEND_FROM env var or onboarding@resend.dev (Resend's sandbox sender).",
+        },
+      },
+      required: ["to", "subject", "body"],
+      additionalProperties: false,
+    },
+    async execute(args: {
+      to: string;
+      subject: string;
+      body: string;
+      from?: string;
+    }) {
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey) {
+        return {
+          error:
+            "Email sending is not configured. Sign up at https://resend.com (free), create an API key, then add RESEND_API_KEY to the Render environment variables for this service.",
+        };
+      }
+      const from =
+        args.from ?? process.env.RESEND_FROM ?? "onboarding@resend.dev";
+      const isHtml = /<[a-z][\s\S]*>/i.test(args.body);
+      try {
+        const res = await safeFetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from,
+            to: [args.to],
+            subject: args.subject,
+            [isHtml ? "html" : "text"]: args.body,
+          }),
+        });
+        if (res.status >= 200 && res.status < 300) {
+          return { ok: true, status: res.status, provider: "resend" };
+        }
+        return {
+          ok: false,
+          status: res.status,
+          error: res.body,
+        };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
+  {
+    name: "post_slack",
+    description:
+      "ACTION: Post a message to a Slack channel via an Incoming Webhook URL. The user must provide the webhook_url (obtained from Slack > Apps > Incoming Webhooks). No other auth needed.",
+    parameters: {
+      type: "object",
+      properties: {
+        webhook_url: {
+          type: "string",
+          description:
+            "Full Slack Incoming Webhook URL, e.g. https://hooks.slack.com/services/XXX/YYY/ZZZ.",
+        },
+        text: { type: "string", description: "The message text to post." },
+      },
+      required: ["webhook_url", "text"],
+      additionalProperties: false,
+    },
+    async execute(args: { webhook_url: string; text: string }) {
+      if (!/^https:\/\/hooks\.slack\.com\//i.test(args.webhook_url)) {
+        return {
+          error:
+            "webhook_url must be a Slack incoming webhook URL (https://hooks.slack.com/...).",
+        };
+      }
+      try {
+        const res = await safeFetch(args.webhook_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: args.text }),
+        });
+        return { ok: res.status === 200, status: res.status, body: res.body };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
+  {
+    name: "post_discord",
+    description:
+      "ACTION: Post a message to a Discord channel via a webhook URL. User must provide the webhook_url (from Discord > Channel > Integrations > Webhooks).",
+    parameters: {
+      type: "object",
+      properties: {
+        webhook_url: {
+          type: "string",
+          description: "Discord webhook URL, e.g. https://discord.com/api/webhooks/...",
+        },
+        content: { type: "string", description: "The message text to post." },
+        username: {
+          type: "string",
+          description: "Optional override display name for the bot.",
+        },
+      },
+      required: ["webhook_url", "content"],
+      additionalProperties: false,
+    },
+    async execute(args: {
+      webhook_url: string;
+      content: string;
+      username?: string;
+    }) {
+      if (
+        !/^https:\/\/(discord|discordapp)\.com\/api\/webhooks\//i.test(
+          args.webhook_url
+        )
+      ) {
+        return {
+          error:
+            "webhook_url must be a Discord webhook URL (https://discord.com/api/webhooks/...).",
+        };
+      }
+      try {
+        const res = await safeFetch(args.webhook_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: args.content,
+            ...(args.username ? { username: args.username } : {}),
+          }),
+        });
+        return { ok: res.status < 300, status: res.status, body: res.body };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
+  {
+    name: "send_telegram",
+    description:
+      "ACTION: Send a message via Telegram. The user must provide a bot_token (from @BotFather) and a chat_id (their user id or channel id). If TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set as environment variables, those are used as defaults.",
+    parameters: {
+      type: "object",
+      properties: {
+        bot_token: {
+          type: "string",
+          description:
+            "Telegram bot token from @BotFather. Optional if TELEGRAM_BOT_TOKEN env var is set.",
+        },
+        chat_id: {
+          type: "string",
+          description:
+            "Telegram chat id. Optional if TELEGRAM_CHAT_ID env var is set.",
+        },
+        text: { type: "string", description: "Message text to send." },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+    async execute(args: { bot_token?: string; chat_id?: string; text: string }) {
+      const token = args.bot_token ?? process.env.TELEGRAM_BOT_TOKEN;
+      const chatId = args.chat_id ?? process.env.TELEGRAM_CHAT_ID;
+      if (!token || !chatId) {
+        return {
+          error:
+            "Missing Telegram credentials. Either pass bot_token + chat_id, or set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars.",
+        };
+      }
+      try {
+        const res = await safeFetch(
+          `https://api.telegram.org/bot${token}/sendMessage`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId, text: args.text }),
+          }
+        );
+        return { ok: res.status === 200, status: res.status, body: res.body };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
 ];
 
 export function getToolByName(name: string): ToolDefinition | undefined {
