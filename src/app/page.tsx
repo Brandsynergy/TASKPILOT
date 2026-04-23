@@ -1,65 +1,189 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { Sparkles, Loader2, CheckCircle2, AlertCircle, Wand2, Zap } from "lucide-react";
+
+type RunLogEntry = {
+  kind: "thought" | "tool" | "tool-result" | "final" | "error";
+  text: string;
+};
+
+type RunResponse = {
+  ok: boolean;
+  summary?: string;
+  log?: RunLogEntry[];
+  error?: string;
+};
+
+const EXAMPLES = [
+  "Fetch today's top 5 Hacker News stories and summarise them in one paragraph.",
+  "Grab the current Bitcoin price in USD and tell me if it's above $70,000.",
+  "Write a 3-line LinkedIn post announcing that we just launched TaskPilot.",
+  "Check https://example.com and tell me the page title.",
+];
 
 export default function Home() {
+  const [prompt, setPrompt] = useState("");
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<RunResponse | null>(null);
+
+  async function run() {
+    if (!prompt.trim() || running) return;
+    setRunning(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = (await res.json()) as RunResponse;
+      setResult(data);
+    } catch (err) {
+      setResult({ ok: false, error: (err as Error).message });
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="flex-1 w-full">
+      <header className="w-full border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
+              <Zap className="h-4 w-4 text-white" />
+            </div>
+            <span className="font-semibold tracking-tight">TaskPilot</span>
+          </div>
+          <a
+            href="https://github.com/BRANDSYNERGY/taskpilot"
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition"
+          >
+            GitHub
+          </a>
+        </div>
+      </header>
+
+      <section className="max-w-3xl mx-auto px-4 pt-10 pb-6 sm:pt-16">
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
+            <Sparkles className="h-3 w-3" />
+            AI-powered task automation
+          </div>
+          <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+            Automate anything with{" "}
+            <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
+              one prompt.
+            </span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-[var(--muted)] max-w-xl mx-auto text-sm sm:text-base">
+            Describe a task in plain English. TaskPilot plans it, runs it, and shows you the result.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl shadow-black/30 overflow-hidden">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="e.g. Get today's weather in London and tell me whether I need an umbrella."
+            rows={4}
+            className="w-full resize-none bg-transparent px-4 py-4 text-base outline-none placeholder:text-[var(--muted)]"
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
+            }}
+          />
+          <div className="flex items-center justify-between border-t border-[var(--border)] px-3 py-2">
+            <span className="text-xs text-[var(--muted)] hidden sm:inline">
+              ⌘/Ctrl + Enter to run
+            </span>
+            <button
+              onClick={run}
+              disabled={running || !prompt.trim()}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2 text-sm font-medium text-white shadow hover:from-violet-400 hover:to-fuchsia-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              {running ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Running…
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-4 w-4" /> Run task
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      </main>
-    </div>
+
+        {!result && !running && (
+          <div className="mt-5 flex flex-wrap gap-2 justify-center">
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                onClick={() => setPrompt(ex)}
+                className="text-xs sm:text-sm rounded-full border border-[var(--border)] px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--muted)] transition"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {(result || running) && (
+        <section className="max-w-3xl mx-auto px-4 pb-16 space-y-4">
+          {running && (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 flex items-center gap-3 text-sm text-[var(--muted)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Thinking & executing… this can take 5–30 seconds.
+            </div>
+          )}
+
+          {result?.ok && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+              <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium mb-2">
+                <CheckCircle2 className="h-4 w-4" /> Done
+              </div>
+              <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
+                {result.summary}
+              </p>
+            </div>
+          )}
+
+          {result && !result.ok && (
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-5">
+              <div className="flex items-center gap-2 text-red-400 text-sm font-medium mb-2">
+                <AlertCircle className="h-4 w-4" /> Something went wrong
+              </div>
+              <p className="text-sm text-red-300 whitespace-pre-wrap">{result.error}</p>
+            </div>
+          )}
+
+          {result?.log && result.log.length > 0 && (
+            <details className="rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+              <summary className="cursor-pointer px-4 py-3 text-sm text-[var(--muted)] hover:text-[var(--foreground)]">
+                Show execution trace ({result.log.length} steps)
+              </summary>
+              <ol className="divide-y divide-[var(--border)]">
+                {result.log.map((entry, i) => (
+                  <li key={i} className="px-4 py-3 text-xs font-mono">
+                    <span className="inline-block min-w-24 text-[var(--muted)] uppercase tracking-wider">
+                      {entry.kind}
+                    </span>
+                    <span className="whitespace-pre-wrap break-words">{entry.text}</span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </section>
+      )}
+
+      <footer className="mt-auto border-t border-[var(--border)] py-6 text-center text-xs text-[var(--muted)]">
+        TaskPilot · built with Next.js + OpenAI · deployed on Render
+      </footer>
+    </main>
   );
 }
