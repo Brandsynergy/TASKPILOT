@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2, CheckCircle2, AlertCircle, Wand2, Zap } from "lucide-react";
+import Image from "next/image";
+import { Sparkles, Loader2, CheckCircle2, AlertCircle, Wand2 } from "lucide-react";
 
 type RunLogEntry = {
   kind: "thought" | "tool" | "tool-result" | "final" | "error";
@@ -51,9 +52,14 @@ export default function Home() {
       <header className="w-full border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-              <Zap className="h-4 w-4 text-white" />
-            </div>
+            <Image
+              src="/icon-192.png"
+              alt="TaskPilot"
+              width={32}
+              height={32}
+              className="rounded-lg"
+              priority
+            />
             <span className="font-semibold tracking-tight">TaskPilot</span>
           </div>
           <a
