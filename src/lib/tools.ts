@@ -473,7 +473,7 @@ export const TOOLS: ToolDefinition[] = [
               fps: 8,
             }),
           },
-          50_000  // 50 second timeout — plenty for this fast model
+          60_000  // 60 second timeout for video generation
         );
         if (res.status !== 200) {
           return { error: `fal.ai video generation failed (${res.status}): ${res.body.slice(0, 300)}` };

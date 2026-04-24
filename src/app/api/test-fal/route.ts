@@ -21,7 +21,7 @@ export async function GET() {
         num_inference_steps: 25,
         fps: 8,
       }),
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(55000),
     });
     const text = await res.text();
     return NextResponse.json({ status: res.status, body: text.slice(0, 500) });
