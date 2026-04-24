@@ -391,6 +391,60 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "generate_video",
+    description:
+      "ACTION: Generate a short AI video from a text prompt using fal.ai. Returns a public video URL ready to post to TikTok/Instagram Reels. Use 9:16 aspect ratio for TikTok. Takes 30-60 seconds. Requires FAL_API_KEY.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description: "Detailed description of the video to generate. Include style, mood, subject, and any text to display.",
+        },
+        aspect_ratio: {
+          type: "string",
+          enum: ["9:16", "16:9", "1:1"],
+          description: "Video aspect ratio. Use 9:16 for TikTok/Reels (default).",
+        },
+      },
+      required: ["prompt"],
+      additionalProperties: false,
+    },
+    async execute(args: { prompt: string; aspect_ratio?: string }) {
+      const apiKey = process.env.FAL_API_KEY;
+      if (!apiKey) {
+        return { error: "FAL_API_KEY is not set. Add it in Render > taskpilot > Environment." };
+      }
+      try {
+        const res = await safeFetch(
+          "https://fal.run/fal-ai/wan/v2.1/text-to-video",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Key ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: args.prompt,
+              aspect_ratio: args.aspect_ratio ?? "9:16",
+              num_frames: 81,
+            }),
+          },
+          90_000
+        );
+        if (res.status !== 200) {
+          return { error: `fal.ai video generation failed (${res.status}): ${res.body.slice(0, 300)}` };
+        }
+        const data = JSON.parse(res.body);
+        const videoUrl = data?.video?.url;
+        if (!videoUrl) return { error: "No video URL returned.", raw: res.body.slice(0, 300) };
+        return { ok: true, video_url: videoUrl };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    },
+  },
+  {
     name: "generate_image",
     description:
       "ACTION: Generate an image from a text prompt using Flux AI (via fal.ai). Returns a public image URL you can use in other tools. Requires FAL_API_KEY env var. Use this to create illustrations, social media visuals, motivational quote backgrounds, etc.",
@@ -464,7 +518,12 @@ export const TOOLS: ToolDefinition[] = [
         media_urls: {
           type: "array",
           items: { type: "string" },
-          description: "Optional public image URLs to attach.",
+          description: "Optional public image or video URLs to attach.",
+        },
+        media_type: {
+          type: "string",
+          enum: ["image", "video"],
+          description: "Type of media being attached. Use 'video' when posting a video URL (e.g. from generate_video tool).",
         },
         scheduled_at: {
           type: "string",
@@ -478,6 +537,7 @@ export const TOOLS: ToolDefinition[] = [
       text: string;
       platform?: string;
       media_urls?: string[];
+      media_type?: string;
       scheduled_at?: string;
     }) {
       const apiKey = process.env.PUBLER_API_KEY;
@@ -539,16 +599,25 @@ export const TOOLS: ToolDefinition[] = [
       }
 
       // Step 3 — build network content per account
-      // Determine provider for network key (default to tiktok if platform specified)
       const networkKey = args.platform?.toLowerCase() ?? "tiktok";
       const hasMedia = (args.media_urls?.length ?? 0) > 0;
+
+      // Detect video URLs by extension or explicit type
+      const isVideo =
+        args.media_type === "video" ||
+        (args.media_urls ?? []).some((u) =>
+          /\.(mp4|mov|webm|avi)/i.test(u) ||
+          u.includes("video")
+        );
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const networkContent: Record<string, any> = {
         [networkKey]: {
-          type: hasMedia ? "photo" : "status",
+          type: hasMedia ? (isVideo ? "video" : "photo") : "status",
           text: args.text,
-          ...(hasMedia ? { media: args.media_urls!.map((url) => ({ url, type: "image" })) } : {}),
+          ...(hasMedia
+            ? { media: args.media_urls!.map((url) => ({ url, type: isVideo ? "video" : "image" })) }
+            : {}),
         },
       };
 
