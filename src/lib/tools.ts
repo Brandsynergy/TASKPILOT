@@ -157,7 +157,12 @@ export const TOOLS: ToolDefinition[] = [
         },
         image_url: {
           type: "string",
-          description: "Optional public image URL to embed prominently in the email (e.g. from generate_image).",
+          description: "Optional single image URL to embed in the email.",
+        },
+        image_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional array of image URLs to embed in the email (e.g. pass both portrait and landscape versions).",
         },
         from: {
           type: "string",
@@ -172,6 +177,7 @@ export const TOOLS: ToolDefinition[] = [
       subject: string;
       body: string;
       image_url?: string;
+      image_urls?: string[];
       from?: string;
     }) {
       const apiKey = process.env.RESEND_API_KEY;
@@ -183,26 +189,39 @@ export const TOOLS: ToolDefinition[] = [
       }
       const from = args.from ?? process.env.RESEND_FROM ?? "onboarding@resend.dev";
 
-      // Build a clean, professional HTML email — no branding header, quote as typography
+      // Build a clean, professional HTML email
       const bodyText = args.body.replace(/\n/g, "<br>");
+      // Collect all image URLs
+      const allImages: string[] = [];
+      if (args.image_url) allImages.push(args.image_url);
+      if (args.image_urls?.length) allImages.push(...args.image_urls);
+
+      const imagesHtml = allImages.length
+        ? allImages.map((url, i) => {
+            const isPortrait = i === 1; // second image shown smaller
+            return `<div style="line-height:0;margin-bottom:${isPortrait ? "0" : "0"}">
+              <img src="${url}" alt="" style="width:100%;display:block;${isPortrait ? "max-height:700px;object-fit:cover;" : ""}">
+            </div>`;
+          }).join("<div style='height:3px;background:#f0f0f0'></div>")
+        : "";
+
       const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   body{margin:0;padding:0;background:#f9f9f9;font-family:Georgia,'Times New Roman',serif;color:#1a1a1a}
   .wrap{max-width:600px;margin:0 auto;background:#fff}
-  .img-wrap{width:100%;line-height:0}
-  .img-wrap img{width:100%;display:block}
-  .content{padding:40px 48px}
-  .quote{font-size:24px;line-height:1.55;color:#111;font-style:italic;margin:0 0 16px 0;border-left:3px solid #7c3aed;padding-left:20px}
-  .body-text{font-size:16px;line-height:1.7;color:#333;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0}
-  .divider{height:1px;background:#eee;margin:32px 0}
-  .footer{font-size:12px;color:#999;font-family:-apple-system,sans-serif;text-align:center;padding:24px 48px}
+  .content{padding:36px 44px}
+  .quote{font-size:22px;line-height:1.6;color:#111;font-style:italic;margin:0 0 12px 0;border-left:3px solid #7c3aed;padding-left:18px}
+  .note{font-size:13px;color:#888;font-family:-apple-system,sans-serif;margin-top:20px}
+  .divider{height:1px;background:#eee;margin:28px 0}
+  .footer{font-size:11px;color:#bbb;font-family:-apple-system,sans-serif;text-align:center;padding:20px}
 </style>
 </head><body>
 <div class="wrap">
-  ${args.image_url ? `<div class="img-wrap"><img src="${args.image_url}" alt=""></div>` : ""}
+  ${imagesHtml}
   <div class="content">
     <div class="quote">${bodyText}</div>
+    ${allImages.length > 0 ? `<p class="note">Images ready to download and post to your social channels.</p>` : ""}
   </div>
   <div class="divider"></div>
   <div class="footer">taskpilot-tpjl.onrender.com</div>
