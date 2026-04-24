@@ -196,13 +196,20 @@ export const TOOLS: ToolDefinition[] = [
       if (args.image_url) allImages.push(args.image_url);
       if (args.image_urls?.length) allImages.push(...args.image_urls);
 
+      const labels = ["Download Landscape", "Download Portrait"];
       const imagesHtml = allImages.length
         ? allImages.map((url, i) => {
-            const isPortrait = i === 1; // second image shown smaller
-            return `<div style="line-height:0;margin-bottom:${isPortrait ? "0" : "0"}">
-              <img src="${url}" alt="" style="width:100%;display:block;${isPortrait ? "max-height:700px;object-fit:cover;" : ""}">
+            const label = labels[i] ?? `Download Image ${i + 1}`;
+            return `
+            <div style="margin-bottom:32px">
+              <div style="line-height:0;border-radius:8px;overflow:hidden">
+                <img src="${url}" alt="" style="width:100%;display:block">
+              </div>
+              <div style="text-align:center;margin-top:12px">
+                <a href="${url}" target="_blank" style="display:inline-block;padding:10px 28px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:6px;font-family:-apple-system,sans-serif;font-size:13px;font-weight:600;letter-spacing:0.3px">${label}</a>
+              </div>
             </div>`;
-          }).join("<div style='height:3px;background:#f0f0f0'></div>")
+          }).join("")
         : "";
 
       const html = `<!DOCTYPE html>
