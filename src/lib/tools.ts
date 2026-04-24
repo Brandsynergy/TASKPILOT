@@ -452,29 +452,23 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "post_publer",
     description:
-      "ACTION: Schedule or immediately publish a social media post via Publer (publer.io). Supports TikTok, Instagram, Facebook, Twitter/X, LinkedIn and more — whichever accounts you have connected in your Publer account. Requires PUBLER_API_KEY env var and at least one account_id. Can include text, image URLs, and an optional scheduled time.",
+      "ACTION: Immediately publish a social media post via Publer. Supports TikTok, Instagram, Facebook, Twitter/X, LinkedIn and more. Requires PUBLER_API_KEY. Auto-discovers workspace and account IDs. Can include text and image URLs.",
     parameters: {
       type: "object",
       properties: {
-        text: {
+        text: { type: "string", description: "Post caption / text content." },
+        platform: {
           type: "string",
-          description: "The post caption / text content.",
-        },
-        account_ids: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Array of Publer account IDs to post to. If not provided, uses PUBLER_ACCOUNT_IDS env var (comma-separated). Find account IDs at https://app.publer.io/api/v1/accounts after connecting your social accounts.",
+          description: "Target platform e.g. tiktok, instagram, facebook, twitter, linkedin. If omitted, posts to all connected accounts.",
         },
         media_urls: {
           type: "array",
           items: { type: "string" },
-          description: "Optional array of public image or video URLs to attach to the post.",
+          description: "Optional public image URLs to attach.",
         },
         scheduled_at: {
           type: "string",
-          description:
-            "Optional ISO 8601 datetime to schedule the post (e.g. 2024-12-01T09:00:00Z). If omitted, posts immediately.",
+          description: "Optional ISO 8601 datetime to schedule (e.g. 2025-01-01T09:00:00Z). Omit to post immediately.",
         },
       },
       required: ["text"],
@@ -482,81 +476,131 @@ export const TOOLS: ToolDefinition[] = [
     },
     async execute(args: {
       text: string;
-      account_ids?: string[];
+      platform?: string;
       media_urls?: string[];
       scheduled_at?: string;
-      platform?: string;
     }) {
       const apiKey = process.env.PUBLER_API_KEY;
       if (!apiKey) {
-        return {
-          error:
-            "Publer is not configured. Add PUBLER_API_KEY to your Render environment variables. Get it from: Publer > workspace gear icon > Settings > API.",
-        };
+        return { error: "PUBLER_API_KEY is not set. Add it in Render > taskpilot > Environment." };
       }
 
-      const authHeader = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+      const BASE = "https://app.publer.com/api/v1";
+      // Publer v1 auth format is Bearer-API (not Bearer)
+      const authBase = {
+        Authorization: `Bearer-API ${apiKey}`,
+        "Content-Type": "application/json",
+      };
 
-      // Step 1: Resolve account IDs — use provided, env var, or auto-fetch from Publer
-      let accountIds: string[] =
-        args.account_ids ??
-        (process.env.PUBLER_ACCOUNT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-
-      if (accountIds.length === 0) {
-        // Auto-fetch accounts from Publer API
+      // Step 1 — auto-fetch workspace ID
+      let workspaceId = process.env.PUBLER_WORKSPACE_ID ?? "";
+      if (!workspaceId) {
         try {
-          const accountsRes = await safeFetch("https://app.publer.io/api/v1/accounts", {
-            method: "GET",
-            headers: authHeader,
-          });
-          if (accountsRes.status !== 200) {
-            return {
-              error: `Could not fetch Publer accounts (HTTP ${accountsRes.status}). Check your PUBLER_API_KEY is correct.`,
-            };
+          const wRes = await safeFetch(`${BASE}/workspaces`, { method: "GET", headers: authBase });
+          if (wRes.status === 200) {
+            const ws = JSON.parse(wRes.body);
+            workspaceId = (Array.isArray(ws) ? ws[0]?.id : ws?.id) ?? "";
           }
-          const accounts: { id: number | string; name: string; type?: string; platform?: string }[] =
-            JSON.parse(accountsRes.body);
-          if (!accounts?.length) {
-            return {
-              error:
-                "No social accounts found in your Publer workspace. Connect TikTok (or another platform) at https://app.publer.io > Social Accounts.",
-            };
-          }
-          // If a platform was specified, filter by it; otherwise use all accounts
-          const platformFilter = args.platform?.toLowerCase();
-          const filtered = platformFilter
-            ? accounts.filter(
-                (a) =>
-                  a.type?.toLowerCase().includes(platformFilter) ||
-                  a.platform?.toLowerCase().includes(platformFilter) ||
-                  a.name?.toLowerCase().includes(platformFilter)
-              )
-            : accounts;
-          const targets = filtered.length ? filtered : accounts;
-          accountIds = targets.map((a) => String(a.id));
+          if (!workspaceId) return { error: `Cannot find Publer workspace. Check PUBLER_API_KEY. Response: ${wRes.body}` };
         } catch (err) {
-          return { error: `Failed to fetch Publer accounts: ${(err as Error).message}` };
+          return { error: `Workspace fetch failed: ${(err as Error).message}` };
         }
       }
 
-      // Step 2: Create the post
-      try {
-        const body: Record<string, unknown> = {
-          account_ids: accountIds,
-          text: args.text,
-        };
-        if (args.media_urls?.length) body.media_urls = args.media_urls;
-        if (args.scheduled_at) body.scheduled_at = args.scheduled_at;
+      const headers = { ...authBase, "Publer-Workspace-Id": String(workspaceId) };
 
-        const res = await safeFetch("https://app.publer.io/api/v1/posts", {
-          method: "POST",
-          headers: authHeader,
-          body: JSON.stringify(body),
-        });
-        if (res.status >= 200 && res.status < 300) {
-          return { ok: true, status: res.status, account_ids: accountIds, response: res.body };
+      // Step 2 — auto-fetch accounts
+      let accountIds: string[] = (process.env.PUBLER_ACCOUNT_IDS ?? "")
+        .split(",").map((s) => s.trim()).filter(Boolean);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let accountsData: any[] = [];
+      if (accountIds.length === 0) {
+        try {
+          const aRes = await safeFetch(`${BASE}/accounts`, { method: "GET", headers });
+          if (aRes.status !== 200) {
+            return { error: `Cannot fetch accounts (HTTP ${aRes.status}): ${aRes.body}` };
+          }
+          accountsData = JSON.parse(aRes.body);
+          if (!accountsData?.length) {
+            return { error: "No connected accounts found in Publer. Connect TikTok/Instagram etc. first." };
+          }
+          const filter = args.platform?.toLowerCase();
+          const matches = filter
+            ? accountsData.filter((a) =>
+                a.provider?.toLowerCase() === filter ||
+                a.name?.toLowerCase().includes(filter)
+              )
+            : accountsData;
+          accountIds = (matches.length ? matches : accountsData).map((a: {id: string}) => String(a.id));
+        } catch (err) {
+          return { error: `Account fetch failed: ${(err as Error).message}` };
         }
-        return { ok: false, status: res.status, account_ids: accountIds, error: res.body };
+      }
+
+      // Step 3 — build network content per account
+      // Determine provider for network key (default to tiktok if platform specified)
+      const networkKey = args.platform?.toLowerCase() ?? "tiktok";
+      const hasMedia = (args.media_urls?.length ?? 0) > 0;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const networkContent: Record<string, any> = {
+        [networkKey]: {
+          type: hasMedia ? "photo" : "status",
+          text: args.text,
+          ...(hasMedia ? { media: args.media_urls!.map((url) => ({ url, type: "image" })) } : {}),
+        },
+      };
+
+      const accountEntries = accountIds.map((id) => ({
+        id,
+        ...(args.scheduled_at ? { scheduled_at: args.scheduled_at } : {}),
+      }));
+
+      const postBody = {
+        bulk: {
+          state: "scheduled",
+          posts: [{ networks: networkContent, accounts: accountEntries }],
+        },
+      };
+
+      // Step 4 — publish
+      const endpoint = args.scheduled_at
+        ? `${BASE}/posts/schedule`
+        : `${BASE}/posts/schedule/publish`;
+
+      try {
+        const pRes = await safeFetch(endpoint, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(postBody),
+        });
+
+        if (pRes.status < 200 || pRes.status >= 300) {
+          return { ok: false, status: pRes.status, error: pRes.body, account_ids: accountIds };
+        }
+
+        const result = JSON.parse(pRes.body);
+        const jobId = result?.job_id ?? result?.data?.job_id;
+
+        if (!jobId) return { ok: true, status: pRes.status, response: pRes.body };
+
+        // Step 5 — poll job status (up to 15s)
+        for (let i = 0; i < 5; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const sRes = await safeFetch(`${BASE}/job_status/${jobId}`, { method: "GET", headers });
+          if (sRes.status === 200) {
+            const s = JSON.parse(sRes.body);
+            if (s.status === "complete" || s.status === "completed") {
+              return { ok: true, job_id: jobId, status: "complete", account_ids: accountIds };
+            }
+            if (s.status === "failed") {
+              return { ok: false, job_id: jobId, status: "failed", details: s };
+            }
+          }
+        }
+        // Still processing — likely succeeded
+        return { ok: true, job_id: jobId, status: "processing", account_ids: accountIds };
       } catch (err) {
         return { error: (err as Error).message };
       }

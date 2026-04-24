@@ -35,6 +35,8 @@ services:
         sync: false
       - key: PUBLER_ACCOUNT_IDS
         sync: false
+      - key: PUBLER_WORKSPACE_ID
+        sync: false
 
 databases:
   - name: taskpilot-db
