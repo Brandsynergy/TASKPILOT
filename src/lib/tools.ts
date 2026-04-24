@@ -391,6 +391,42 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "get_quote",
+    description:
+      "Fetch a random motivational or inspirational quote. Returns quote text and author. Use this instead of searching the internet for quotes — it is fast and reliable.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    async execute() {
+      // ZenQuotes — free, reliable, no auth required
+      const FALLBACKS = [
+        { q: "The only way to do great work is to love what you do.", a: "Steve Jobs" },
+        { q: "Believe you can and you're halfway there.", a: "Theodore Roosevelt" },
+        { q: "It does not matter how slowly you go as long as you do not stop.", a: "Confucius" },
+        { q: "Success is not final, failure is not fatal: it is the courage to continue that counts.", a: "Winston Churchill" },
+        { q: "The future belongs to those who believe in the beauty of their dreams.", a: "Eleanor Roosevelt" },
+        { q: "You are never too old to set another goal or to dream a new dream.", a: "C.S. Lewis" },
+      ];
+      try {
+        const res = await safeFetch("https://zenquotes.io/api/random", {
+          method: "GET",
+          headers: { "User-Agent": "TaskPilotBot/1.0" },
+        }, 8_000);
+        if (res.status === 200) {
+          const data = JSON.parse(res.body);
+          if (Array.isArray(data) && data[0]?.q) {
+            return { quote: data[0].q, author: data[0].a };
+          }
+        }
+      } catch { /* fall through to fallback */ }
+      // Fallback: pick a random hardcoded quote
+      const pick = FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)];
+      return { quote: pick.q, author: pick.a };
+    },
+  },
+  {
     name: "generate_video",
     description:
       "ACTION: Generate a short AI video from a text prompt using fal.ai. Returns a public video URL ready to post to TikTok/Instagram Reels. Use 9:16 aspect ratio for TikTok. Takes 30-60 seconds. Requires FAL_API_KEY.",
@@ -419,15 +455,13 @@ export const TOOLS: ToolDefinition[] = [
         Authorization: `Key ${apiKey}`,
         "Content-Type": "application/json",
       };
-      // Map aspect ratio to video_size enum for fast-animatediff
       const isPortrait = (args.aspect_ratio ?? "9:16") === "9:16";
       const videoSize = isPortrait ? "portrait_16_9" : "landscape_16_9";
-      const MODEL = "fal-ai/fast-animatediff/text-to-video";
 
       try {
-        // Step 1: Submit to fal.ai queue
-        const submitRes = await safeFetch(
-          `https://queue.fal.run/${MODEL}`,
+        // Synchronous endpoint — fast-animatediff generates in ~10-15 seconds
+        const res = await safeFetch(
+          "https://fal.run/fal-ai/fast-animatediff/text-to-video",
           {
             method: "POST",
             headers,
@@ -439,42 +473,15 @@ export const TOOLS: ToolDefinition[] = [
               fps: 8,
             }),
           },
-          15_000
+          50_000  // 50 second timeout — plenty for this fast model
         );
-        if (submitRes.status !== 200) {
-          return { error: `fal.ai submit failed (${submitRes.status}): ${submitRes.body.slice(0, 300)}` };
+        if (res.status !== 200) {
+          return { error: `fal.ai video generation failed (${res.status}): ${res.body.slice(0, 300)}` };
         }
-        const { request_id } = JSON.parse(submitRes.body);
-        if (!request_id) return { error: "No request_id from fal.ai queue" };
-
-        // Step 2: Poll for result (up to 90 seconds)
-        for (let i = 0; i < 18; i++) {
-          await new Promise((r) => setTimeout(r, 5000));
-          const statusRes = await safeFetch(
-            `https://queue.fal.run/${MODEL}/requests/${request_id}/status`,
-            { method: "GET", headers },
-            10_000
-          );
-          if (statusRes.status === 200) {
-            const s = JSON.parse(statusRes.body);
-            if (s.status === "COMPLETED") {
-              // Step 3: Fetch result
-              const resultRes = await safeFetch(
-                `https://queue.fal.run/${MODEL}/requests/${request_id}`,
-                { method: "GET", headers },
-                10_000
-              );
-              const result = JSON.parse(resultRes.body);
-              const videoUrl = result?.video?.url;
-              if (!videoUrl) return { error: "No video URL in result", raw: resultRes.body.slice(0, 300) };
-              return { ok: true, video_url: videoUrl };
-            }
-            if (s.status === "FAILED") {
-              return { error: `fal.ai video generation failed: ${JSON.stringify(s).slice(0, 300)}` };
-            }
-          }
-        }
-        return { error: "Video generation timed out after 90 seconds." };
+        const data = JSON.parse(res.body);
+        const videoUrl = data?.video?.url;
+        if (!videoUrl) return { error: "No video URL returned", raw: res.body.slice(0, 300) };
+        return { ok: true, video_url: videoUrl };
       } catch (err) {
         return { error: (err as Error).message };
       }
