@@ -145,24 +145,23 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "send_email",
     description:
-      "ACTION: Actually send a real email. Uses Resend under the hood. Requires RESEND_API_KEY to be set in the server environment. If it's not set, this tool returns an error explaining how to configure it. Use this whenever the user asks to email, mail, or send something to an email address.",
+      "ACTION: Send a beautifully formatted HTML email. Supports an optional image_url to embed an image in the email body. Requires RESEND_API_KEY env var. Use for delivering motivational content, summaries, reports, or any rich email.",
     parameters: {
       type: "object",
       properties: {
-        to: {
-          type: "string",
-          description: "Recipient email address, e.g. user@example.com.",
-        },
+        to: { type: "string", description: "Recipient email address." },
         subject: { type: "string", description: "Email subject line." },
         body: {
           type: "string",
-          description:
-            "Email body. Plain text or simple HTML. If HTML, wrap in <p> tags etc.",
+          description: "Main text content. Can be plain text or HTML.",
+        },
+        image_url: {
+          type: "string",
+          description: "Optional public image URL to embed prominently in the email (e.g. from generate_image).",
         },
         from: {
           type: "string",
-          description:
-            "Optional sender address. Defaults to the RESEND_FROM env var or onboarding@resend.dev (Resend's sandbox sender).",
+          description: "Optional sender address. Defaults to RESEND_FROM env var.",
         },
       },
       required: ["to", "subject", "body"],
@@ -172,6 +171,7 @@ export const TOOLS: ToolDefinition[] = [
       to: string;
       subject: string;
       body: string;
+      image_url?: string;
       from?: string;
     }) {
       const apiKey = process.env.RESEND_API_KEY;
@@ -181,9 +181,35 @@ export const TOOLS: ToolDefinition[] = [
             "Email sending is not configured. Sign up at https://resend.com (free), create an API key, then add RESEND_API_KEY to the Render environment variables for this service.",
         };
       }
-      const from =
-        args.from ?? process.env.RESEND_FROM ?? "onboarding@resend.dev";
-      const isHtml = /<[a-z][\s\S]*>/i.test(args.body);
+      const from = args.from ?? process.env.RESEND_FROM ?? "onboarding@resend.dev";
+
+      // Build a polished HTML email
+      const bodyText = args.body.replace(/\n/g, "<br>");
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f0f0f0}
+  .wrap{max-width:600px;margin:40px auto;background:#111;border-radius:16px;overflow:hidden;border:1px solid #222}
+  .header{background:linear-gradient(135deg,#7c3aed,#d946ef);padding:24px;text-align:center}
+  .header h1{margin:0;font-size:22px;color:#fff;letter-spacing:-0.5px}  
+  .body{padding:32px}
+  .quote{font-size:20px;line-height:1.6;color:#f0f0f0;margin-bottom:8px}
+  .author{font-size:14px;color:#a78bfa;margin-bottom:24px}
+  .img-wrap{border-radius:12px;overflow:hidden;margin-bottom:24px}
+  .img-wrap img{width:100%;display:block}
+  .footer{padding:16px 32px;text-align:center;font-size:12px;color:#555;border-top:1px solid #1a1a1a}
+</style>
+</head><body>
+<div class="wrap">
+  <div class="header"><h1>\u26a1 Your Daily TaskPilot Delivery</h1></div>
+  <div class="body">
+    ${args.image_url ? `<div class="img-wrap"><img src="${args.image_url}" alt="Daily visual"></div>` : ""}
+    <div class="quote">${bodyText}</div>
+  </div>
+  <div class="footer">Sent by TaskPilot &middot; Automate anything with one prompt</div>
+</div>
+</body></html>`;
+
       try {
         const res = await safeFetch("https://api.resend.com/emails", {
           method: "POST",
@@ -191,21 +217,12 @@ export const TOOLS: ToolDefinition[] = [
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            from,
-            to: [args.to],
-            subject: args.subject,
-            [isHtml ? "html" : "text"]: args.body,
-          }),
+          body: JSON.stringify({ from, to: [args.to], subject: args.subject, html }),
         });
         if (res.status >= 200 && res.status < 300) {
           return { ok: true, status: res.status, provider: "resend" };
         }
-        return {
-          ok: false,
-          status: res.status,
-          error: res.body,
-        };
+        return { ok: false, status: res.status, error: res.body };
       } catch (err) {
         return { error: (err as Error).message };
       }
