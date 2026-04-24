@@ -415,30 +415,66 @@ export const TOOLS: ToolDefinition[] = [
       if (!apiKey) {
         return { error: "FAL_API_KEY is not set. Add it in Render > taskpilot > Environment." };
       }
+      const headers = {
+        Authorization: `Key ${apiKey}`,
+        "Content-Type": "application/json",
+      };
+      // Map aspect ratio to video_size enum for fast-animatediff
+      const isPortrait = (args.aspect_ratio ?? "9:16") === "9:16";
+      const videoSize = isPortrait ? "portrait_16_9" : "landscape_16_9";
+      const MODEL = "fal-ai/fast-animatediff/text-to-video";
+
       try {
-        const res = await safeFetch(
-          "https://fal.run/fal-ai/wan/v2.1/text-to-video",
+        // Step 1: Submit to fal.ai queue
+        const submitRes = await safeFetch(
+          `https://queue.fal.run/${MODEL}`,
           {
             method: "POST",
-            headers: {
-              Authorization: `Key ${apiKey}`,
-              "Content-Type": "application/json",
-            },
+            headers,
             body: JSON.stringify({
               prompt: args.prompt,
-              aspect_ratio: args.aspect_ratio ?? "9:16",
-              num_frames: 81,
+              video_size: videoSize,
+              num_frames: 16,
+              num_inference_steps: 25,
+              fps: 8,
             }),
           },
-          90_000
+          15_000
         );
-        if (res.status !== 200) {
-          return { error: `fal.ai video generation failed (${res.status}): ${res.body.slice(0, 300)}` };
+        if (submitRes.status !== 200) {
+          return { error: `fal.ai submit failed (${submitRes.status}): ${submitRes.body.slice(0, 300)}` };
         }
-        const data = JSON.parse(res.body);
-        const videoUrl = data?.video?.url;
-        if (!videoUrl) return { error: "No video URL returned.", raw: res.body.slice(0, 300) };
-        return { ok: true, video_url: videoUrl };
+        const { request_id } = JSON.parse(submitRes.body);
+        if (!request_id) return { error: "No request_id from fal.ai queue" };
+
+        // Step 2: Poll for result (up to 90 seconds)
+        for (let i = 0; i < 18; i++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          const statusRes = await safeFetch(
+            `https://queue.fal.run/${MODEL}/requests/${request_id}/status`,
+            { method: "GET", headers },
+            10_000
+          );
+          if (statusRes.status === 200) {
+            const s = JSON.parse(statusRes.body);
+            if (s.status === "COMPLETED") {
+              // Step 3: Fetch result
+              const resultRes = await safeFetch(
+                `https://queue.fal.run/${MODEL}/requests/${request_id}`,
+                { method: "GET", headers },
+                10_000
+              );
+              const result = JSON.parse(resultRes.body);
+              const videoUrl = result?.video?.url;
+              if (!videoUrl) return { error: "No video URL in result", raw: resultRes.body.slice(0, 300) };
+              return { ok: true, video_url: videoUrl };
+            }
+            if (s.status === "FAILED") {
+              return { error: `fal.ai video generation failed: ${JSON.stringify(s).slice(0, 300)}` };
+            }
+          }
+        }
+        return { error: "Video generation timed out after 90 seconds." };
       } catch (err) {
         return { error: (err as Error).message };
       }
