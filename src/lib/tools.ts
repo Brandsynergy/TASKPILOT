@@ -457,11 +457,12 @@ export const TOOLS: ToolDefinition[] = [
       };
       const isPortrait = (args.aspect_ratio ?? "9:16") === "9:16";
       const videoSize = isPortrait ? "portrait_16_9" : "landscape_16_9";
+      const MODEL = "fal-ai/t2v-turbo"; // 4 inference steps — much faster than animatediff
 
       try {
-        // Synchronous endpoint — fast-animatediff generates in ~10-15 seconds
-        const res = await safeFetch(
-          "https://fal.run/fal-ai/fast-animatediff/text-to-video",
+        // Step 1: Submit to queue (returns immediately with request_id)
+        const submit = await safeFetch(
+          `https://queue.fal.run/${MODEL}`,
           {
             method: "POST",
             headers,
@@ -469,19 +470,45 @@ export const TOOLS: ToolDefinition[] = [
               prompt: args.prompt,
               video_size: videoSize,
               num_frames: 16,
-              num_inference_steps: 25,
-              fps: 8,
+              num_inference_steps: 4,
+              export_fps: 8,
             }),
           },
-          60_000  // 60 second timeout for video generation
+          15_000
         );
-        if (res.status !== 200) {
-          return { error: `fal.ai video generation failed (${res.status}): ${res.body.slice(0, 300)}` };
+        if (submit.status !== 200) {
+          return { error: `fal.ai submit failed (${submit.status}): ${submit.body.slice(0, 300)}` };
         }
-        const data = JSON.parse(res.body);
-        const videoUrl = data?.video?.url;
-        if (!videoUrl) return { error: "No video URL returned", raw: res.body.slice(0, 300) };
-        return { ok: true, video_url: videoUrl };
+        const { request_id } = JSON.parse(submit.body);
+        if (!request_id) return { error: `No request_id: ${submit.body.slice(0, 200)}` };
+
+        // Step 2: Poll every 4 seconds, up to 80 seconds
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 4000));
+          const statusRes = await safeFetch(
+            `https://queue.fal.run/${MODEL}/requests/${request_id}/status`,
+            { method: "GET", headers },
+            10_000
+          );
+          if (statusRes.status === 200) {
+            const s = JSON.parse(statusRes.body);
+            if (s.status === "COMPLETED") {
+              const resultRes = await safeFetch(
+                `https://queue.fal.run/${MODEL}/requests/${request_id}`,
+                { method: "GET", headers },
+                10_000
+              );
+              const result = JSON.parse(resultRes.body);
+              const videoUrl = result?.video?.url;
+              if (!videoUrl) return { error: "No video URL in result", raw: resultRes.body.slice(0, 300) };
+              return { ok: true, video_url: videoUrl };
+            }
+            if (s.status === "FAILED") {
+              return { error: `Generation failed: ${JSON.stringify(s).slice(0, 300)}` };
+            }
+          }
+        }
+        return { error: "Video generation timed out after 80 seconds." };
       } catch (err) {
         return { error: (err as Error).message };
       }
