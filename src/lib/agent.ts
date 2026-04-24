@@ -22,7 +22,7 @@ const SYSTEM_PROMPT = `You are TaskPilot, an autonomous task EXECUTION agent. Yo
 Core rules:
 1. ACTION FIRST. Always use tools to DO things — never just describe what you would do.
 2. For motivational/inspirational quotes, ALWAYS use get_quote. Never search the internet.
-3. For images, use generate_image. It returns an image URL.
+3. For images, use generate_image. Describe ONLY the visual scene — never include words, text, quotes or letters in the image prompt. Text belongs in the email body, not the image.
 4. For email delivery, use send_email with the quote as the body and the image URL embedded in HTML.
 5. For other channels: post_slack, post_discord, send_telegram, post_publer.
 6. For data (news, weather, prices), use http_request or fetch_webpage_text.

@@ -183,30 +183,29 @@ export const TOOLS: ToolDefinition[] = [
       }
       const from = args.from ?? process.env.RESEND_FROM ?? "onboarding@resend.dev";
 
-      // Build a polished HTML email
+      // Build a clean, professional HTML email — no branding header, quote as typography
       const bodyText = args.body.replace(/\n/g, "<br>");
       const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  body{margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f0f0f0}
-  .wrap{max-width:600px;margin:40px auto;background:#111;border-radius:16px;overflow:hidden;border:1px solid #222}
-  .header{background:linear-gradient(135deg,#7c3aed,#d946ef);padding:24px;text-align:center}
-  .header h1{margin:0;font-size:22px;color:#fff;letter-spacing:-0.5px}  
-  .body{padding:32px}
-  .quote{font-size:20px;line-height:1.6;color:#f0f0f0;margin-bottom:8px}
-  .author{font-size:14px;color:#a78bfa;margin-bottom:24px}
-  .img-wrap{border-radius:12px;overflow:hidden;margin-bottom:24px}
+  body{margin:0;padding:0;background:#f9f9f9;font-family:Georgia,'Times New Roman',serif;color:#1a1a1a}
+  .wrap{max-width:600px;margin:0 auto;background:#fff}
+  .img-wrap{width:100%;line-height:0}
   .img-wrap img{width:100%;display:block}
-  .footer{padding:16px 32px;text-align:center;font-size:12px;color:#555;border-top:1px solid #1a1a1a}
+  .content{padding:40px 48px}
+  .quote{font-size:24px;line-height:1.55;color:#111;font-style:italic;margin:0 0 16px 0;border-left:3px solid #7c3aed;padding-left:20px}
+  .body-text{font-size:16px;line-height:1.7;color:#333;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0}
+  .divider{height:1px;background:#eee;margin:32px 0}
+  .footer{font-size:12px;color:#999;font-family:-apple-system,sans-serif;text-align:center;padding:24px 48px}
 </style>
 </head><body>
 <div class="wrap">
-  <div class="header"><h1>\u26a1 Your Daily TaskPilot Delivery</h1></div>
-  <div class="body">
-    ${args.image_url ? `<div class="img-wrap"><img src="${args.image_url}" alt="Daily visual"></div>` : ""}
+  ${args.image_url ? `<div class="img-wrap"><img src="${args.image_url}" alt=""></div>` : ""}
+  <div class="content">
     <div class="quote">${bodyText}</div>
   </div>
-  <div class="footer">Sent by TaskPilot &middot; Automate anything with one prompt</div>
+  <div class="divider"></div>
+  <div class="footer">taskpilot-tpjl.onrender.com</div>
 </div>
 </body></html>`;
 
