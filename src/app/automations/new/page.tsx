@@ -2,9 +2,36 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Zap } from "lucide-react";
 import Link from "next/link";
 import { DAYS_OF_WEEK } from "@/lib/scheduler";
+
+const TEMPLATES = [
+  {
+    name: "Daily Motivation Email",
+    description: "Cinematic AI image + quote delivered to your inbox every morning.",
+    prompt: "Get a motivational quote using get_quote. Generate a landscape image (size: landscape_16_9) and a portrait image (size: portrait_4_3) of a cinematic inspiring scene that matches the quote theme using generate_image. Send an email to YOUR_EMAIL with subject 'Your Daily Motivation', the quote as the body, and both image URLs as image_urls.",
+    scheduleType: "daily",
+    hour: 8,
+    minute: 0,
+  },
+  {
+    name: "Daily News Summary",
+    description: "Top headlines fetched and emailed to you each morning.",
+    prompt: "Fetch today's top 5 headlines from https://hacker-news.firebaseio.com/v0/topstories.json (get each story via https://hacker-news.firebaseio.com/v0/item/ID.json). Send a summary email to YOUR_EMAIL with subject 'Your Daily News Briefing'.",
+    scheduleType: "daily",
+    hour: 7,
+    minute: 30,
+  },
+  {
+    name: "Weekly Bitcoin Price Alert",
+    description: "Bitcoin price check sent to you every Monday morning.",
+    prompt: "Fetch the current Bitcoin price from https://api.coinpaprika.com/v1/tickers/btc-bitcoin and send an email to YOUR_EMAIL with subject 'Weekly Bitcoin Update' and the price plus whether it is above or below $70,000.",
+    scheduleType: "weekly",
+    hour: 9,
+    minute: 0,
+  },
+];
 
 export default function NewAutomationPage() {
   const router = useRouter();
@@ -47,7 +74,33 @@ export default function NewAutomationPage() {
         <ArrowLeft className="h-3.5 w-3.5" /> Back to automations
       </Link>
       <h1 className="text-2xl font-semibold mb-1">New Automation</h1>
-      <p className="text-sm text-[var(--muted)] mb-8">Set it once. TaskPilot runs it automatically on your schedule.</p>
+      <p className="text-sm text-[var(--muted)] mb-6">Set it once. TaskPilot runs it automatically on your schedule.</p>
+
+      {/* Templates */}
+      <div className="mb-8">
+        <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-3">Quick start templates</p>
+        <div className="space-y-2">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.name}
+              onClick={() => {
+                setName(t.name);
+                setPrompt(t.prompt);
+                setScheduleType(t.scheduleType);
+                setHour(t.hour);
+                setMinute(t.minute);
+              }}
+              className="w-full text-left rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 hover:border-violet-500/50 hover:bg-violet-500/5 transition group"
+            >
+              <div className="flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                <span className="text-sm font-medium group-hover:text-violet-300 transition">{t.name}</span>
+              </div>
+              <p className="text-xs text-[var(--muted)] mt-0.5 ml-5.5">{t.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="space-y-5">
         {/* Name */}
