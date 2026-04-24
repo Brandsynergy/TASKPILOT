@@ -485,23 +485,61 @@ export const TOOLS: ToolDefinition[] = [
       account_ids?: string[];
       media_urls?: string[];
       scheduled_at?: string;
+      platform?: string;
     }) {
       const apiKey = process.env.PUBLER_API_KEY;
       if (!apiKey) {
         return {
           error:
-            "Publer is not configured. Sign up at https://publer.io, go to Settings > API, copy your API key, then add PUBLER_API_KEY to your Render environment variables. Also add PUBLER_ACCOUNT_IDS (comma-separated account IDs from https://app.publer.io/api/v1/accounts).",
+            "Publer is not configured. Add PUBLER_API_KEY to your Render environment variables. Get it from: Publer > workspace gear icon > Settings > API.",
         };
       }
-      const accountIds =
+
+      const authHeader = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+
+      // Step 1: Resolve account IDs — use provided, env var, or auto-fetch from Publer
+      let accountIds: string[] =
         args.account_ids ??
         (process.env.PUBLER_ACCOUNT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+
       if (accountIds.length === 0) {
-        return {
-          error:
-            "No Publer account IDs provided. Either pass account_ids in the prompt, or set PUBLER_ACCOUNT_IDS env var. Get your account IDs from https://app.publer.io/api/v1/accounts.",
-        };
+        // Auto-fetch accounts from Publer API
+        try {
+          const accountsRes = await safeFetch("https://app.publer.io/api/v1/accounts", {
+            method: "GET",
+            headers: authHeader,
+          });
+          if (accountsRes.status !== 200) {
+            return {
+              error: `Could not fetch Publer accounts (HTTP ${accountsRes.status}). Check your PUBLER_API_KEY is correct.`,
+            };
+          }
+          const accounts: { id: number | string; name: string; type?: string; platform?: string }[] =
+            JSON.parse(accountsRes.body);
+          if (!accounts?.length) {
+            return {
+              error:
+                "No social accounts found in your Publer workspace. Connect TikTok (or another platform) at https://app.publer.io > Social Accounts.",
+            };
+          }
+          // If a platform was specified, filter by it; otherwise use all accounts
+          const platformFilter = args.platform?.toLowerCase();
+          const filtered = platformFilter
+            ? accounts.filter(
+                (a) =>
+                  a.type?.toLowerCase().includes(platformFilter) ||
+                  a.platform?.toLowerCase().includes(platformFilter) ||
+                  a.name?.toLowerCase().includes(platformFilter)
+              )
+            : accounts;
+          const targets = filtered.length ? filtered : accounts;
+          accountIds = targets.map((a) => String(a.id));
+        } catch (err) {
+          return { error: `Failed to fetch Publer accounts: ${(err as Error).message}` };
+        }
       }
+
+      // Step 2: Create the post
       try {
         const body: Record<string, unknown> = {
           account_ids: accountIds,
@@ -509,18 +547,16 @@ export const TOOLS: ToolDefinition[] = [
         };
         if (args.media_urls?.length) body.media_urls = args.media_urls;
         if (args.scheduled_at) body.scheduled_at = args.scheduled_at;
+
         const res = await safeFetch("https://app.publer.io/api/v1/posts", {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
+          headers: authHeader,
           body: JSON.stringify(body),
         });
         if (res.status >= 200 && res.status < 300) {
-          return { ok: true, status: res.status, response: res.body };
+          return { ok: true, status: res.status, account_ids: accountIds, response: res.body };
         }
-        return { ok: false, status: res.status, error: res.body };
+        return { ok: false, status: res.status, account_ids: accountIds, error: res.body };
       } catch (err) {
         return { error: (err as Error).message };
       }
