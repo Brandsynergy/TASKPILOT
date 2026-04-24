@@ -208,23 +208,14 @@ export const TOOLS: ToolDefinition[] = [
       const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  body{margin:0;padding:0;background:#f9f9f9;font-family:Georgia,'Times New Roman',serif;color:#1a1a1a}
+  body{margin:0;padding:0;background:#fff;font-family:Georgia,'Times New Roman',serif}
   .wrap{max-width:600px;margin:0 auto;background:#fff}
-  .content{padding:36px 44px}
-  .quote{font-size:22px;line-height:1.6;color:#111;font-style:italic;margin:0 0 12px 0;border-left:3px solid #7c3aed;padding-left:18px}
-  .note{font-size:13px;color:#888;font-family:-apple-system,sans-serif;margin-top:20px}
-  .divider{height:1px;background:#eee;margin:28px 0}
-  .footer{font-size:11px;color:#bbb;font-family:-apple-system,sans-serif;text-align:center;padding:20px}
+  .quote{font-size:22px;line-height:1.6;color:#111;font-style:italic;padding:36px 44px;margin:0;border-left:3px solid #7c3aed;margin:32px 44px}
 </style>
 </head><body>
 <div class="wrap">
   ${imagesHtml}
-  <div class="content">
-    <div class="quote">${bodyText}</div>
-    ${allImages.length > 0 ? `<p class="note">Images ready to download and post to your social channels.</p>` : ""}
-  </div>
-  <div class="divider"></div>
-  <div class="footer">taskpilot-tpjl.onrender.com</div>
+  <div class="quote">${bodyText}</div>
 </div>
 </body></html>`;
 
